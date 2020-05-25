@@ -1,0 +1,24 @@
+{
+  "name": "arksserver",
+  "version": "1.0.0",
+  "main": "server.js",
+  "author": "Ogen Ben-Dor <ogenbd@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "connect-session-sequelize": "^6.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1",
+    "express-session": "^1.17.1",
+    "jsonwebtoken": "^8.5.1",
+    "passport": "^0.4.1",
+    "passport-google-oauth20": "^2.0.0",
+    "pg": "^8.2.1",
+    "pg-hstore": "^2.3.3",
+    "sequelize": "^5.21.10"
+  },
+  "devDependencies": {}
+}

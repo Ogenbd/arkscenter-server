@@ -1,0 +1,7 @@
+*.git
+*.env
+*node_modules
+*sshok
+*sshopk
+*sshpk.ppk
+*yarn.lock
