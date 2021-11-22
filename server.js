@@ -1,5 +1,4 @@
 require("dotenv").config();
-// const app = require("express")();
 const express = require("express");
 const app = express();
 const session = require("express-session");
@@ -7,15 +6,18 @@ const jwt = require("jsonwebtoken");
 const Sequelize = require("sequelize");
 const SequelizeStore = require("connect-session-sequelize")(session.Store);
 
-if (process.env.NODE_ENV === "development") {
-  const cors = require("cors");
-  app.use(cors());
-  app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "http://localhost:3000");
-    res.header("Access-Control-Allow-Credentials", "true");
-    next();
-  });
-}
+const Op = Sequelize.Op;
+
+// if (process.env.NODE_ENV === "development") {
+//   const cors = require("cors");
+//   app.use(cors());
+//   app.use((req, res, next) => {
+//     // res.header("Access-Control-Allow-Origin", "http://localhost:3000");
+//     res.header("Access-Control-Allow-Origin", "http://localhost:3000/planner");
+//     res.header("Access-Control-Allow-Credentials", "true");
+//     next();
+//   });
+// }
 
 const HOME =
   process.env.NODE_ENV === "development" ? "http://localhost:3000" : "/";
@@ -42,6 +44,7 @@ const db = new Sequelize(
   process.env.password,
   {
     dialect: "postgres",
+    host: "localhost",
     pool: {
       max: 5,
       min: 0,
@@ -74,33 +77,51 @@ const User = db.define("user", {
     defaultValue: false,
     allowNull: false,
   },
+  discord: {
+    type: Sequelize.STRING(25),
+  },
 });
 
 const Guide = db.define("guide", {
-  authorId: {
-    type: Sequelize.INTEGER,
-    references: {
-      model: User,
-      key: "id",
-    },
+  category: {
+    type: Sequelize.SMALLINT,
     allowNull: false,
   },
   title: {
-    type: Sequelize.STRING(192),
+    type: Sequelize.STRING(128),
     allowNull: false,
+  },
+  description: {
+    type: Sequelize.STRING(256),
   },
   markdown: {
     type: Sequelize.TEXT,
   },
+  likeSum: {
+    type: Sequelize.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  },
+});
+
+const ClassGuide = db.define("classguide", {
   skills: {
     type: Sequelize.JSONB,
     allowNull: false,
   },
-  mainClass: {
+  main: {
     type: Sequelize.SMALLINT,
     allowNull: false,
   },
-  subClass: {
+  sub: {
+    type: Sequelize.SMALLINT,
+    allowNull: false,
+  },
+  mainVersion: {
+    type: Sequelize.SMALLINT,
+    allowNull: false,
+  },
+  subVersion: {
     type: Sequelize.SMALLINT,
     allowNull: false,
   },
@@ -110,13 +131,42 @@ const Guide = db.define("guide", {
   },
   subLvl: {
     type: Sequelize.SMALLINT,
-  },
-  likeSum: {
-    type: Sequelize.INTEGER,
     allowNull: false,
-    defaultValue: 0,
+  },
+  mainCOSP: {
+    type: Sequelize.SMALLINT,
+    allowNull: false,
+  },
+  subCOSP: {
+    type: Sequelize.SMALLINT,
+    allowNull: false,
+  },
+  mag: {
+    type: Sequelize.JSONB,
+    allowNull: false,
+  },
+  classBoosts: {
+    type: Sequelize.ARRAY(Sequelize.BOOLEAN),
+    allowNull: false,
+  },
+  race: {
+    type: Sequelize.SMALLINT,
+    allowNull: false,
+  },
+  gender: {
+    type: Sequelize.SMALLINT,
+    allowNull: false,
   },
 });
+
+User.hasMany(Guide, { foreignKey: { allowNull: false } });
+Guide.belongsTo(User, { foreignKey: { allowNull: false } });
+Guide.hasMany(ClassGuide, { foreignKey: { allowNull: false } });
+ClassGuide.belongsTo(Guide, { foreignKey: { allowNull: false } });
+
+sessionStore.sync();
+// db.sync().catch((err) => console.log(err));
+db.sync({ force: true }).catch((err) => console.log(err));
 
 app.use(
   session({
@@ -131,9 +181,6 @@ app.use(
     },
   })
 );
-
-// sessionStore.sync();
-// db.sync();
 
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
@@ -241,6 +288,114 @@ app.post("/logout", (req, res) => {
     }
   });
 });
+
+app.post("/saveguide", verifyToken, (req, res) => {
+  // console.log({ authorId: req.tokenData.user.id, ...req.body });
+  // console.log(req.tokenData, req.body);
+  Guide.create({ userId: req.tokenData.user.id, ...req.body })
+    .then((data) => {
+      res.json({ id: data.dataValues.id, title: data.dataValues.title });
+    })
+    .catch((err) => console.log(err));
+  // User.addGuide
+});
+
+app.get("/getguide", async (req, res) => {
+  console.log(req.query.id);
+  const data = await Guide.findOne({
+    where: { id: req.query.id },
+    attributes: { include: [[Sequelize.col("username"), "username"]] },
+    include: [{ model: User, attributes: [] }],
+  }).catch((err) => res.sendStatus(500));
+  if (!data) res.sendStatus(204);
+  res.json(data);
+});
+
+app.get("/getguides", async (req, res) => {
+  // console.log(req.query);
+  let { main, sub, lvl, na } = req.query;
+  main = parseInt(main);
+  sub = parseInt(sub);
+  lvl = parseInt(lvl);
+  na = parseInt(na);
+  // console.log(typeof main);
+  let search = {
+    attributes: {
+      exclude: [
+        "markdown",
+        "skills",
+        "mainCOSP",
+        "subCOSP",
+        "mag",
+        "classBoosts",
+        "race",
+        "gender",
+        "createdAt",
+      ],
+      include: [[Sequelize.col("username"), "username"]],
+      //   [
+      //   "id",
+      //   "title",
+      //   "description",
+      //   "main",
+      //   "sub",
+      //   "mainVersion",
+      //   "subVersion",
+      //   "mainLvl",
+      //   "subLvl",
+      //   "likeSum",
+      //   "createdAt",
+      //   "updatedAt",
+      //   "userId",
+      //   // { model: User, attributes: ["username"], as: "username" },
+      // ]
+    },
+    include: [{ model: User }],
+    include: [{ model: User, attributes: [] }],
+    where: {},
+  };
+  if (na) {
+    if (main !== -1) {
+      search.where.main = main;
+    } else {
+      search.where.main = { [Op.lt]: 9 };
+    }
+    if (sub !== -1) {
+      search.where.sub = sub;
+    } else {
+      search.where.sub = { [Op.lt]: 9 };
+    }
+    search.where.mainLvl = { [Op.lte]: lvl };
+    search.where.subLvl = { [Op.lte]: lvl };
+  } else {
+    if (main !== -1) {
+      search.where.main = main;
+    }
+    if (sub !== -1) {
+      search.where.sub = sub;
+    }
+    if (lvl < 95) {
+      search.where.mainLvl = { [Op.lte]: lvl };
+      search.where.subLvl = { [Op.lte]: lvl };
+    }
+  }
+  // console.log(search);
+  const data = await Guide.findAll(search);
+  res.json(data);
+});
+
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization.split(" ")[1];
+  jwt.verify(authHeader, process.env.jwtsecret, (err, verified) => {
+    if (err) {
+      console.log(err);
+      req.sendStatus(401);
+    } else {
+      req.tokenData = verified;
+      next();
+    }
+  });
+}
 
 const port = process.env.port || 5000;
 
